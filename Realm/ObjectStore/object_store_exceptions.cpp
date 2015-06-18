@@ -128,5 +128,3 @@ const ObjectStoreException::FormatStrings ObjectStoreException::s_default_format
     {Kind::ObjectStoreValidationFailure,
         "Migration is required for object type '{InfoKeyObjectType}' due to the following errors: {ValidationErrors}"}
 };
-
-
