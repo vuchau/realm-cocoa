@@ -23,6 +23,7 @@
 #import "RLMRealmConfiguration_Private.h"
 #import "RLMMigration_Private.h"
 #import "RLMObjectSchema_Private.hpp"
+#import "RLMProperty_Private.h"
 #import "RLMObjectStore.h"
 #import "RLMObject_Private.h"
 #import "RLMObject_Private.hpp"
@@ -305,7 +306,50 @@ static id RLMAutorelease(id value) {
     return value ? (__bridge id)CFAutorelease((__bridge_retained CFTypeRef)value) : nil;
 }
 
-void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema, ObjectStore::Schema &alignedSchema);
+static void RLMCopyColumnMapping(RLMObjectSchema *targetSchema, const ObjectSchema &tableSchema) {
+    // copy updated column mapping
+    for (size_t i = 0; i < tableSchema.properties.size(); i++) {
+        ((RLMProperty *)targetSchema.properties[i]).column = tableSchema.properties[i].table_column;
+    }
+
+    // re-order properties
+    targetSchema.properties = [targetSchema.properties sortedArrayUsingComparator:^NSComparisonResult(RLMProperty *p1, RLMProperty *p2) {
+        if (p1.column < p2.column) return NSOrderedAscending;
+        if (p1.column > p2.column) return NSOrderedDescending;
+        return NSOrderedSame;
+    }];
+}
+
+static void RLMRealmSetSchema(RLMRealm *realm, RLMSchema *targetSchema, bool verifyAndAlignColumns) {
+    realm.schema = targetSchema;
+    for (RLMObjectSchema *objectSchema in realm.schema.objectSchema) {
+        objectSchema.realm = realm;
+
+        // read-only realms may be missing tables entirely
+        if (verifyAndAlignColumns && objectSchema.table) {
+            ObjectSchema schema = objectSchema.objectStoreCopy;
+            if (verifyAndAlignColumns) {
+                auto errors = ObjectStore::validate_object_schema(realm.group, schema);
+                if (errors.size()) {
+                    @throw RLMException(ObjectStoreException(errors, schema.name));
+                }
+            }
+            else {
+                ObjectStore::update_column_mapping(realm.group, schema);
+            }
+            RLMCopyColumnMapping(objectSchema, schema);
+        }
+    }
+}
+
+static void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema, ObjectStore::Schema &alignedSchema) {
+    realm.schema = targetSchema;
+    for (ObjectSchema &aligned:alignedSchema) {
+        RLMObjectSchema *objectSchema = targetSchema[@(aligned.name.c_str())];
+        objectSchema.realm = realm;
+        RLMCopyColumnMapping(objectSchema, aligned);
+    }
+}
 
 + (instancetype)realmWithConfiguration:(RLMRealmConfiguration *)configuration error:(NSError **)error {
     NSString *path = configuration.path;
@@ -405,12 +449,17 @@ void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema, ObjectS
             }
             else {
                 // if we are the first realm at this path, set/align schema or perform migration if needed
-                RLMSchema *targetSchema = customSchema ?: RLMSchema.sharedSchema;
-                @try {
-                    RLMUpdateRealmToSchemaVersion(realm, configuration.schemaVersion, [targetSchema copy]);
+                RLMSchema *targetSchema = customSchema ?: [RLMSchema.sharedSchema copy];
+                ObjectStore::Schema schema;
+                for (RLMObjectSchema *objectSchema in targetSchema.objectSchema) {
+                    schema.push_back(objectSchema.objectStoreCopy);
                 }
-                @catch (NSException *exception) {
-                    RLMSetErrorOrThrow(RLMMakeError(exception), error);
+                uint64_t newVersion = configuration.schemaVersion;
+                try {
+                    realm->_realm->update_schema(schema, newVersion);
+                    RLMRealmSetSchemaAndAlign(realm, targetSchema, schema);
+                } catch (const std::exception & exception) {
+                    RLMSetErrorOrThrow(RLMMakeError(RLMException(exception)), error);
                     return nil;
                 }
 
@@ -771,16 +820,8 @@ void RLMRealmSetSchemaVersionForPath(uint64_t version, NSString *path, RLMMigrat
     NSData *key = configuration.encryptionKey ?: keyForPath(realmPath);
 
     NSError *error;
-    RLMRealm *realm = [RLMRealm realmWithPath:realmPath key:key readOnly:NO inMemory:NO dynamic:YES schema:nil error:&error];
-    if (error)
-        return error;
-
-    @try {
-        RLMUpdateRealmToSchemaVersion(realm, schemaVersionForPath(realmPath), [RLMSchema.sharedSchema copy]);
-    } @catch (NSException *ex) {
-        return RLMMakeError(ex);
-    }
-    return nil;
+    [RLMRealm realmWithPath:realmPath key:key readOnly:NO inMemory:NO dynamic:YES schema:[RLMSchema.sharedSchema copy] error:&error];
+    return error;
 }
 
 - (RLMObject *)createObject:(NSString *)className withValue:(id)value {
