@@ -40,8 +40,6 @@ FOUNDATION_EXTERN void RLMRealmAddPathSettingsToConfiguration(RLMRealmConfigurat
 
 + (void)resetRealmState;
 
-- (instancetype)initWithPath:(NSString *)path key:(NSData *)key readOnly:(BOOL)readonly inMemory:(BOOL)inMemory dynamic:(BOOL)dynamic error:(NSError **)error;
-
 /**
  This method is useful only in specialized circumstances, for example, when opening Realm files
  retrieved externally that contain a different schema than defined in your application.
