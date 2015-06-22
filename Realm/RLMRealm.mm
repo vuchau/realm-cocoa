@@ -438,7 +438,6 @@ static void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema, 
             // for readonly realms and dynamic realms without a custom schema just set the schema
             RLMSchema *targetSchema = readOnly ? [RLMSchema.sharedSchema copy] : [RLMSchema dynamicSchemaFromRealm:realm];
             RLMRealmSetSchema(realm, targetSchema, true);
-            RLMRealmCreateAccessors(realm.schema);
         }
         else {
             // check cache for existing cached realms with the same path
@@ -462,8 +461,6 @@ static void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema, 
                     RLMSetErrorOrThrow(RLMMakeError(RLMException(exception)), error);
                     return nil;
                 }
-
-                RLMRealmCreateAccessors(realm.schema);
             }
 
             // initializing the schema started a read transaction, so end it
@@ -471,6 +468,7 @@ static void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema, 
         }
 
         if (!dynamic) {
+            RLMRealmCreateAccessors(realm.schema);
             RLMCacheRealm(realm);
         }
     }
