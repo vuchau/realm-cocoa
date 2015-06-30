@@ -146,7 +146,7 @@ static inline NSDate *RLMDateTimeToNSDate(realm::DateTime dateTime) {
 }
 
 static inline realm::DateTime RLMDateTimeForNSDate(__unsafe_unretained NSDate *const date) {
-    std::time_t time = date.timeIntervalSince1970;
+    int64_t time = date.timeIntervalSince1970;
     return realm::DateTime(time);
 }
 
