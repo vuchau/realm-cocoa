@@ -18,6 +18,7 @@
 
 #import "RLMRealm_Private.h"
 #import "RLMUtil.hpp"
+#import "shared_realm.hpp"
 
 #import <realm/link_view.hpp>
 #import <realm/group.hpp>

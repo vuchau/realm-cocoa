@@ -211,7 +211,9 @@ static void RLMInsertObject(RLMArrayLinkView *ar, RLMObject *object, NSUInteger 
         [ar.realm addObject:object];
     }
     else if (object->_realm) {
-        RLMVerifyAttached(object);
+        if (!object->_row.is_attached()) {
+            @throw RLMException(@"Object has been deleted or invalidated.");
+        }
     }
 
     changeArray(ar, NSKeyValueChangeInsertion, index, ^{
