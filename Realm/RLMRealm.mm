@@ -422,6 +422,37 @@ static void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema, 
     try {
         realm->_realm = Realm::get_shared_realm(config);
     }
+    catch (RealmException & ex) {
+        switch (ex.kind()) {
+            case RealmException::Kind::FilePermissionDenied: {
+                NSString *mode = readonly ? @"read" : @"read-write";
+                NSString *additionalMessage = [NSString stringWithFormat:@"Unable to open a realm at path '%@'. Please use a path where your app has %@ permissions.", path, mode];
+                NSString *newMessage = [NSString stringWithFormat:@"%s\n%@", ex.what(), additionalMessage];
+                RLMSetErrorOrThrow(RLMMakeError(RLMErrorFilePermissionDenied, File::PermissionDenied(newMessage.UTF8String)), outError);
+                break;
+            }
+            case RealmException::Kind::IncompatibleLockFile: {
+                NSString *err = @"Realm file is currently open in another process "
+                                "which cannot share access with this process. All "
+                                "processes sharing a single file must be the same "
+                                "architecture. For sharing files between the Realm "
+                                "Browser and an iOS simulator, this means that you "
+                                "must use a 64-bit simulator.";
+                RLMSetErrorOrThrow(RLMMakeError(RLMErrorIncompatibleLockFile, File::PermissionDenied(err.UTF8String)), outError);
+                break;
+            }
+            case RealmException::Kind::FileExists:
+                RLMSetErrorOrThrow(RLMMakeError(RLMErrorFileExists, ex), outError);
+                break;
+            case RealmException::Kind::FileAccessError:
+                RLMSetErrorOrThrow(RLMMakeError(RLMErrorFileAccessError, ex), outError);
+                break;
+            default:
+                RLMSetErrorOrThrow(RLMMakeError(RLMErrorFail, ex), outError);
+                break;
+        }
+        return nil;
+    }
     catch(const std::exception &exp) {
         RLMSetErrorOrThrow(RLMMakeError(RLMErrorFail, exp), error);
         return nil;
