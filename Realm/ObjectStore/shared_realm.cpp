@@ -22,11 +22,10 @@
 #include <realm/group_shared.hpp>
 #include <realm/lang_bind_helper.hpp>
 
-using namespace std;
 using namespace realm;
 
 RealmCache Realm::s_global_cache;
-mutex Realm::s_init_mutex;
+std::mutex Realm::s_init_mutex;
 
 Realm::Config::Config(const Config& c) : path(c.path), read_only(c.read_only), in_memory(c.in_memory), schema_version(c.schema_version), migration_function(c.migration_function)
 {
@@ -39,18 +38,18 @@ Realm::Config::Config(const Config& c) : path(c.path), read_only(c.read_only), i
     }
 }
 
-Realm::Realm(Config &config) : m_config(config), m_thread_id(this_thread::get_id()), m_auto_refresh(true), m_in_transaction(false)
+Realm::Realm(Config &config) : m_config(config), m_thread_id(std::this_thread::get_id()), m_auto_refresh(true), m_in_transaction(false)
 {
     try {
         if (config.read_only) {
-            m_read_only_group = make_unique<Group>(config.path, config.encryption_key.get(), Group::mode_ReadOnly);
+            m_read_only_group = std::make_unique<Group>(config.path, config.encryption_key.get(), Group::mode_ReadOnly);
             m_group = m_read_only_group.get();
         }
         else {
             m_history = realm::make_client_history(config.path, config.encryption_key.get());
             SharedGroup::DurabilityLevel durability = config.in_memory ? SharedGroup::durability_MemOnly :
                                                                          SharedGroup::durability_Full;
-            m_shared_group = make_unique<SharedGroup>(*m_history, durability, config.encryption_key.get());
+            m_shared_group = std::make_unique<SharedGroup>(*m_history, durability, config.encryption_key.get());
             m_group = nullptr;
         }
     }
@@ -95,12 +94,12 @@ SharedRealm Realm::get_shared_realm(Config &config)
     realm = SharedRealm(new Realm(config));
 
     // we want to ensure we are only initializing a single realm at a time
-    lock_guard<mutex> lock(s_init_mutex);
+    std::lock_guard<std::mutex> lock(s_init_mutex);
 
     if (!config.schema) {
         // get schema from group and skip validation
         realm->m_config.schema_version = ObjectStore::get_schema_version(realm->read_group());
-        realm->m_config.schema = make_unique<ObjectStore::Schema>(ObjectStore::schema_from_group(realm->read_group()));
+        realm->m_config.schema = std::make_unique<ObjectStore::Schema>(ObjectStore::schema_from_group(realm->read_group()));
     }
     else if (config.read_only) {
         // for read-only validate all existing tables
@@ -113,7 +112,7 @@ SharedRealm Realm::get_shared_realm(Config &config)
     else if(auto existing = s_global_cache.get_any_realm(realm->config().path)) {
         // if there is an existing realm at the current path steal its schema/column mapping
         // FIXME - need to validate that schemas match
-        realm->m_config.schema = make_unique<ObjectStore::Schema>(*existing->m_config.schema);
+        realm->m_config.schema = std::make_unique<ObjectStore::Schema>(*existing->m_config.schema);
     }
     else {
         // its a non-cached realm so update/migrate if needed
@@ -133,7 +132,7 @@ bool Realm::update_schema(ObjectStore::Schema &schema, uint64_t version)
         commit_transaction();
         m_config.schema_version = version;
         if (m_config.schema.get() != &schema) {
-            m_config.schema = make_unique<ObjectStore::Schema>(schema);
+            m_config.schema = std::make_unique<ObjectStore::Schema>(schema);
         }
     }
     catch (...) {
@@ -155,7 +154,7 @@ static void check_read_write(Realm *realm)
 
 void Realm::verify_thread()
 {
-    if (m_thread_id != this_thread::get_id()) {
+    if (m_thread_id != std::this_thread::get_id()) {
         throw RealmException(RealmException::Kind::IncorrectThread, "Realm accessed from incorrect thread.");
     }
 }
@@ -267,7 +266,7 @@ void Realm::notify()
 }
 
 
-void Realm::send_local_notifications(const string &type)
+void Realm::send_local_notifications(const std::string &type)
 {
     verify_thread();
     for (NotificationFunction notification : m_notifications) {
@@ -305,7 +304,7 @@ bool Realm::refresh()
 
 SharedRealm RealmCache::get_realm(const std::string &path, std::thread::id thread_id)
 {
-    lock_guard<mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_mutex);
 
     auto path_iter = m_cache.find(path);
     if (path_iter == m_cache.end()) {
@@ -322,7 +321,7 @@ SharedRealm RealmCache::get_realm(const std::string &path, std::thread::id threa
 
 SharedRealm RealmCache::get_any_realm(const std::string &path)
 {
-    lock_guard<mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_mutex);
 
     auto path_iter = m_cache.find(path);
     if (path_iter == m_cache.end()) {
@@ -341,7 +340,7 @@ SharedRealm RealmCache::get_any_realm(const std::string &path)
 
 void RealmCache::remove(const std::string &path, std::thread::id thread_id)
 {
-    lock_guard<mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_mutex);
 
     auto path_iter = m_cache.find(path);
     if (path_iter == m_cache.end()) {
@@ -360,11 +359,11 @@ void RealmCache::remove(const std::string &path, std::thread::id thread_id)
 
 void RealmCache::cache_realm(SharedRealm &realm, std::thread::id thread_id)
 {
-    lock_guard<mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_mutex);
 
     auto path_iter = m_cache.find(realm->config().path);
     if (path_iter == m_cache.end()) {
-        m_cache.emplace(realm->config().path, map<std::thread::id, WeakRealm>{{thread_id, realm}});
+        m_cache.emplace(realm->config().path, std::map<std::thread::id, WeakRealm>{{thread_id, realm}});
     }
     else {
         path_iter->second.emplace(thread_id, realm);

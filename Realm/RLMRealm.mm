@@ -425,10 +425,10 @@ static void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema, 
     catch (RealmException & ex) {
         switch (ex.kind()) {
             case RealmException::Kind::FilePermissionDenied: {
-                NSString *mode = readonly ? @"read" : @"read-write";
+                NSString *mode = readOnly ? @"read" : @"read-write";
                 NSString *additionalMessage = [NSString stringWithFormat:@"Unable to open a realm at path '%@'. Please use a path where your app has %@ permissions.", path, mode];
                 NSString *newMessage = [NSString stringWithFormat:@"%s\n%@", ex.what(), additionalMessage];
-                RLMSetErrorOrThrow(RLMMakeError(RLMErrorFilePermissionDenied, File::PermissionDenied(newMessage.UTF8String)), outError);
+                RLMSetErrorOrThrow(RLMMakeError(RLMErrorFilePermissionDenied, File::PermissionDenied(newMessage.UTF8String)), error);
                 break;
             }
             case RealmException::Kind::IncompatibleLockFile: {
@@ -438,17 +438,17 @@ static void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema, 
                                 "architecture. For sharing files between the Realm "
                                 "Browser and an iOS simulator, this means that you "
                                 "must use a 64-bit simulator.";
-                RLMSetErrorOrThrow(RLMMakeError(RLMErrorIncompatibleLockFile, File::PermissionDenied(err.UTF8String)), outError);
+                RLMSetErrorOrThrow(RLMMakeError(RLMErrorIncompatibleLockFile, File::PermissionDenied(err.UTF8String)), error);
                 break;
             }
             case RealmException::Kind::FileExists:
-                RLMSetErrorOrThrow(RLMMakeError(RLMErrorFileExists, ex), outError);
+                RLMSetErrorOrThrow(RLMMakeError(RLMErrorFileExists, ex), error);
                 break;
             case RealmException::Kind::FileAccessError:
-                RLMSetErrorOrThrow(RLMMakeError(RLMErrorFileAccessError, ex), outError);
+                RLMSetErrorOrThrow(RLMMakeError(RLMErrorFileAccessError, ex), error);
                 break;
             default:
-                RLMSetErrorOrThrow(RLMMakeError(RLMErrorFail, ex), outError);
+                RLMSetErrorOrThrow(RLMMakeError(RLMErrorFail, ex), error);
                 break;
         }
         return nil;
@@ -811,7 +811,6 @@ void RLMRealmSetSchemaVersionForPath(uint64_t version, NSString *path, RLMMigrat
         return realm->_realm->config().schema_version;
     }
 
-    NSError *error;
     try {
         Realm::Config config;
         config.path = realmPath.UTF8String;
@@ -823,7 +822,7 @@ void RLMRealmSetSchemaVersionForPath(uint64_t version, NSString *path, RLMMigrat
         return version;
     }
     catch (std::exception *exp) {
-        RLMSetErrorOrThrow(error, outError);
+        RLMSetErrorOrThrow(RLMMakeError(RLMErrorFail, *exp), outError);
         return RLMNotVersioned;
     }
 }
