@@ -46,6 +46,8 @@ using namespace realm;
     self.className = objectClassName;
     self.properties = properties;
     self.objectClass = objectClass;
+    self.accessorClass = objectClass;
+    self.standaloneClass = objectClass;
     return self;
 }
 

@@ -1255,7 +1255,6 @@ extern "C" {
     [realm path]; // ensure ARC releases the object after the thread has finished
 }
 
-#if 0
 - (void)testCompact
 {
     RLMRealm *realm = self.realmWithTestPath;
@@ -1273,7 +1272,6 @@ extern "C" {
     unsigned long long fileSizeAfter = fileSize(realm.path);
     XCTAssertGreaterThan(fileSizeBefore, fileSizeAfter);
 }
-#endif
 
 - (NSArray *)pathsFor100Realms
 {

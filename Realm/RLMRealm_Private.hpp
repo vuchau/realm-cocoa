@@ -27,12 +27,15 @@
 namespace realm {
     class Group;
     class Realm;
+    typedef std::shared_ptr<realm::Realm> SharedRealm;
 }
 
 @interface RLMRealm () {
     @public
-    std::shared_ptr<realm::Realm> _realm;
+    realm::SharedRealm _realm;
 }
+
++ (instancetype)realmWithSharedRealm:(realm::SharedRealm)sharedRealm;
 
 // FIXME - group should not be exposed
 @property (nonatomic, readonly) realm::Group *group;

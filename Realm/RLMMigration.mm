@@ -50,19 +50,13 @@ using namespace realm;
 
 @implementation RLMMigration
 
-- (instancetype)initWithRealm:(RLMRealm *)realm key:(NSData *)key error:(NSError **)error {
+- (instancetype)initWithRealm:(RLMRealm *)realm oldRealm:(RLMRealm *)oldRealm {
     self = [super init];
     if (self) {
         // create rw realm to migrate with current on disk table
         _realm = realm;
-
-        // create read only realm used during migration with current on disk schema
-        _oldRealm = [RLMRealm realmWithPath:realm.path key:key readOnly:NO inMemory:NO dynamic:YES schema:nil error:error];
+        _oldRealm = oldRealm;
         object_setClass(_oldRealm, RLMMigrationRealm.class);
-
-        if (error && *error) {
-            return nil;
-        }
     }
     return self;
 }
@@ -111,7 +105,7 @@ using namespace realm;
         }
 
         // apply block and set new schema version
-        uint64_t oldVersion = _realm->_realm->config().schema_version;
+        uint64_t oldVersion = _oldRealm->_realm->config().schema_version;
         block(self, oldVersion);
     }
 }

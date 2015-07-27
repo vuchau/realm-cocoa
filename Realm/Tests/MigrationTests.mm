@@ -169,20 +169,18 @@ static void RLMAssertRealmSchemaMatchesTable(id self, RLMRealm *realm) {
         }];
     }
 
-    @autoreleasepool {
-        // apply migration
-        [RLMRealm setSchemaVersion:1 forRealmAtPath:RLMTestRealmPath() withMigrationBlock:^(RLMMigration *migration, uint64_t oldSchemaVersion) {
-            XCTAssertEqual(oldSchemaVersion, 0U, @"Initial schema version should be 0");
+    // apply migration
+    [RLMRealm setSchemaVersion:1 forRealmAtPath:RLMTestRealmPath() withMigrationBlock:^(RLMMigration *migration, uint64_t oldSchemaVersion) {
+        XCTAssertEqual(oldSchemaVersion, 0U, @"Initial schema version should be 0");
 
-            XCTAssertTrue([migration deleteDataForClassName:@"DeletedClass"]);
-            XCTAssertFalse([migration deleteDataForClassName:@"NoSuchClass"]);
-            XCTAssertFalse([migration deleteDataForClassName:self.nonLiteralNil]);
+        XCTAssertTrue([migration deleteDataForClassName:@"DeletedClass"]);
+        XCTAssertFalse([migration deleteDataForClassName:@"NoSuchClass"]);
+        XCTAssertFalse([migration deleteDataForClassName:self.nonLiteralNil]);
 
-            [migration createObject:StringObject.className withValue:@[@"migration"]];
-            XCTAssertTrue([migration deleteDataForClassName:StringObject.className]);
-        }];
-        [RLMRealm migrateRealmAtPath:RLMTestRealmPath()];
-    }
+        [migration createObject:StringObject.className withValue:@[@"migration"]];
+        XCTAssertTrue([migration deleteDataForClassName:StringObject.className]);
+    }];
+    [RLMRealm migrateRealmAtPath:RLMTestRealmPath()];
 
     @autoreleasepool {
         // verify migration
