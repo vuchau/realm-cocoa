@@ -241,9 +241,10 @@ static void RLMInsertObject(RLMArrayLinkView *ar, RLMObject *object, NSUInteger 
             if (obj->_realm != _realm) {
                 [_realm addObject:obj];
             }
-            else {
-                RLMVerifyAttached(obj);
+            else if (!obj->_row.is_attached()) {
+                @throw RLMException(@"Object has been deleted or invalidated.");
             }
+
             _backingLinkView->insert(index, obj->_row.get_index());
             index = [indexes indexGreaterThanIndex:index];
         }
