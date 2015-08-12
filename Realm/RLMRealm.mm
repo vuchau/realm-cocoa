@@ -540,6 +540,7 @@ void RLMRealmSetEncryptionKeyForPath(NSData *encryptionKey, NSString *path) {
     clearMigrationCache();
     clearKeyCache();
     RLMClearRealmCache();
+    realm::Realm::s_global_cache.clear();
     [RLMRealmConfiguration resetRealmConfigurationState];
 }
 
