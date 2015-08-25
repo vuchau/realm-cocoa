@@ -17,9 +17,13 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #import "RLMRealmConfiguration_Private.h"
+
+#import "RLMObjectSchema_Private.hpp"
 #import "RLMRealm_Private.h"
-#import "RLMUtil.hpp"
 #import "RLMSchema_Private.h"
+#import "RLMUtil.hpp"
+
+#import "shared_realm.hpp"
 
 #include <atomic>
 
@@ -33,7 +37,6 @@ static NSString * const c_RLMRealmConfigurationProperties[] = {
     @"dynamic",
     @"customSchema",
 };
-static const NSUInteger c_RLMRealmConfigurationPropertiesCount = sizeof(c_RLMRealmConfigurationProperties) / sizeof(NSString *);
 
 typedef NS_ENUM(NSUInteger, RLMRealmConfigurationUsage) {
     RLMRealmConfigurationUsageNone,
@@ -43,23 +46,23 @@ typedef NS_ENUM(NSUInteger, RLMRealmConfigurationUsage) {
 
 static std::atomic<RLMRealmConfigurationUsage> s_configurationUsage;
 
-@implementation RLMRealmConfiguration
+@implementation RLMRealmConfiguration {
+    realm::Realm::Config _config;
+}
+
+- (realm::Realm::Config&)config {
+    return _config;
+}
 
 RLMRealmConfiguration *s_defaultConfiguration;
 static NSString * const c_defaultRealmFileName = @"default.realm";
 
-+ (NSString *)defaultRealmPath
-{
-    static NSString *defaultRealmPath;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        defaultRealmPath = [[self class] writeablePathForFile:c_defaultRealmFileName];
-    });
++ (NSString *)defaultRealmPath {
+    static NSString *defaultRealmPath = [[self class] writeablePathForFile:c_defaultRealmFileName];
     return defaultRealmPath;
 }
 
-+ (NSString *)writeablePathForFile:(NSString*)fileName
-{
++ (NSString *)writeablePathForFile:(NSString*)fileName {
 #if TARGET_OS_IPHONE
     // On iOS the Documents directory isn't user-visible, so put files there
     NSString *path = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0];
@@ -117,6 +120,7 @@ static NSString * const c_defaultRealmFileName = @"default.realm";
     self = [super init];
     if (self) {
         self.path = [[self class] defaultRealmPath];
+        self.schemaVersion = 0;
     }
 
     return self;
@@ -124,17 +128,16 @@ static NSString * const c_defaultRealmFileName = @"default.realm";
 
 - (instancetype)copyWithZone:(NSZone *)zone {
     RLMRealmConfiguration *configuration = [[[self class] allocWithZone:zone] init];
-    for (NSUInteger i = 0; i < c_RLMRealmConfigurationPropertiesCount; i++) {
-        NSString *key = c_RLMRealmConfigurationProperties[i];
-        [configuration setValue:[self valueForKey:key] forKey:key];
-    }
+    configuration->_config = _config;
+    configuration->_dynamic = _dynamic;
+    configuration->_migrationBlock = _migrationBlock;
+    configuration->_customSchema = _customSchema;
     return configuration;
 }
 
 - (NSString *)description {
     NSMutableString *string = [NSMutableString stringWithFormat:@"%@ {\n", self.class];
-    for (NSUInteger i = 0; i < c_RLMRealmConfigurationPropertiesCount; i++) {
-        NSString *key = c_RLMRealmConfigurationProperties[i];
+    for (NSString *key : c_RLMRealmConfigurationProperties) {
         NSString *description = [[self valueForKey:key] description];
         description = [description stringByReplacingOccurrencesOfString:@"\n" withString:@"\n\t"];
 
@@ -143,34 +146,108 @@ static NSString * const c_defaultRealmFileName = @"default.realm";
     return [string stringByAppendingString:@"}"];
 }
 
-- (void)setInMemoryIdentifier:(NSString *)inMemoryIdentifier {
-    if ((_inMemoryIdentifier = inMemoryIdentifier)) {
-        _path = nil;
+- (NSString *)path {
+    return _config.in_memory ? nil :@(_config.path.c_str());
+}
+
+static void RLMNSStringToStdString(std::string &out, NSString *in) {
+    out.resize([in maximumLengthOfBytesUsingEncoding:NSUTF8StringEncoding]);
+    if (out.empty()) {
+        return;
     }
+
+    NSUInteger size = out.size();
+    [in getBytes:&out[0]
+       maxLength:size
+      usedLength:&size
+        encoding:NSUTF8StringEncoding
+         options:0 range:{0, in.length} remainingRange:nullptr];
+    out.resize(size);
 }
 
 - (void)setPath:(NSString *)path {
-    if ((_path = path)) {
-        _inMemoryIdentifier = nil;
+    if (!path.length) {
+        @throw RLMException(@"Path cannot be empty");
     }
+
+    RLMNSStringToStdString(_config.path, path);
+    _config.in_memory = false;
+}
+
+- (NSString *)inMemoryIdentifier {
+    if (!_config.in_memory) {
+        return nil;
+    }
+    return [@(_config.path.c_str()) lastPathComponent];
+}
+
+- (void)setInMemoryIdentifier:(NSString *)inMemoryIdentifier {
+    if (!inMemoryIdentifier.length) {
+        @throw RLMException(@"Identifier cannot be empty");
+    }
+    RLMNSStringToStdString(_config.path, [NSTemporaryDirectory() stringByAppendingPathComponent:inMemoryIdentifier]);
+    _config.in_memory = true;
+}
+
+- (NSData *)encryptionKey {
+    return _config.encryption_key.empty() ? nil : [NSData dataWithBytes:_config.encryption_key.data() length:_config.encryption_key.size()];
 }
 
 - (void)setEncryptionKey:(NSData * __nullable)encryptionKey {
-    _encryptionKey = RLMRealmValidatedEncryptionKey(encryptionKey);
+    if (NSData *key = RLMRealmValidatedEncryptionKey(encryptionKey)) {
+        auto bytes = static_cast<const char *>(key.bytes);
+        _config.encryption_key.assign(bytes, bytes + key.length);
+    }
+    else {
+        _config.encryption_key.clear();
+    }
+}
+- (BOOL)readOnly {
+    return _config.read_only;
+}
+
+- (void)setReadOnly:(BOOL)readOnly {
+    _config.read_only = readOnly;
+}
+
+- (uint64_t)schemaVersion {
+    return _config.schema_version;
 }
 
 - (void)setSchemaVersion:(uint64_t)schemaVersion {
-    if ((_schemaVersion = schemaVersion) == RLMNotVersioned) {
+    if (schemaVersion == RLMNotVersioned) {
         @throw RLMException([NSString stringWithFormat:@"Cannot set schema version to %llu (RLMNotVersioned)", RLMNotVersioned]);
     }
-}
-
-- (void)setObjectClasses:(NSArray *)objectClasses {
-    _customSchema = [RLMSchema schemaWithObjectClasses:objectClasses];
+    _config.schema_version = schemaVersion;
 }
 
 - (NSArray *)objectClasses {
     return [_customSchema.objectSchema valueForKeyPath:@"objectClass"];
+}
+
+- (void)setObjectClasses:(NSArray *)objectClasses {
+    self.customSchema = [RLMSchema schemaWithObjectClasses:objectClasses];
+}
+
+- (void)setDynamic:(bool)dynamic {
+    _dynamic = dynamic;
+    _config.cache = !dynamic;
+}
+
+- (void)setCustomSchema:(RLMSchema *)customSchema {
+    _customSchema = customSchema;
+
+    // FIXME: can any of this throw?
+    if (_customSchema) {
+        _config.schema = std::make_unique<realm::Schema>();
+        for (RLMObjectSchema *objectSchema in customSchema.objectSchema) {
+            auto os = objectSchema.objectStoreCopy;
+            _config.schema->emplace(os.name, std::move(os));
+        }
+    }
+    else {
+        _config.schema = nullptr;
+    }
 }
 
 @end
