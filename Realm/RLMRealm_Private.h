@@ -36,7 +36,6 @@ FOUNDATION_EXTERN void RLMRealmAddPathSettingsToConfiguration(RLMRealmConfigurat
 
 @property (nonatomic, readonly) BOOL dynamic;
 @property (nonatomic, readwrite) RLMSchema *schema;
-@property (nonatomic, strong) RLMNotifier *notifier;
 
 + (void)resetRealmState;
 
