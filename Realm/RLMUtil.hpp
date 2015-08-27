@@ -17,6 +17,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #import <Realm/RLMConstants.h>
+#import <Realm/RLMOptionalBase.h>
 #import <objc/runtime.h>
 
 #import <realm/array.hpp>
@@ -75,6 +76,9 @@ template<typename T>
 static inline T *RLMNSNullToNil(T *obj) {
     if (static_cast<id>(obj) == NSNull.null) {
         return nil;
+    }
+    else if (RLMIsKindOfClass(object_getClass(obj), [RLMOptionalBase class])) {
+        return [static_cast<RLMOptionalBase *>(obj) underlyingValue];
     }
     return obj;
 }
