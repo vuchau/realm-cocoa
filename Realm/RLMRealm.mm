@@ -788,17 +788,12 @@ void RLMRealmSetSchemaVersionForPath(uint64_t version, NSString *path, RLMMigrat
 }
 
 + (uint64_t)schemaVersionAtPath:(NSString *)realmPath encryptionKey:(NSData *)key error:(NSError **)outError {
-    key = RLMRealmValidatedEncryptionKey(key) ?: keyForPath(realmPath);
-    RLMRealm *realm = RLMGetThreadLocalCachedRealmForPath(realmPath);
-    if (realm) {
-        return realm->_realm->config().schema_version;
-    }
-
     try {
-        Realm::Config config;
-        config.path = realmPath.UTF8String;
-//        config.encryption_key = key ? static_cast<const char *>(key.bytes) : StringData();
-        uint64_t version = Realm::get_shared_realm(config)->config().schema_version;
+        RLMRealmConfiguration *config = [[RLMRealmConfiguration alloc] init];
+        config.path = realmPath;
+        config.encryptionKey = RLMRealmValidatedEncryptionKey(key) ?: keyForPath(realmPath);
+
+        uint64_t version = Realm::get_schema_version(config.config);
         if (version == realm::ObjectStore::NotVersioned) {
             RLMSetErrorOrThrow([NSError errorWithDomain:RLMErrorDomain code:RLMErrorFail userInfo:@{NSLocalizedDescriptionKey:@"Cannot open an uninitialized realm in read-only mode"}], outError);
         }
