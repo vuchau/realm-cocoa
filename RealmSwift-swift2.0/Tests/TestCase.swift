@@ -46,19 +46,20 @@ class TestCase: XCTestCase {
     }
 
     override func invokeTest() {
-        Realm.defaultPath = realmPathForFile("\(realmFilePrefix()).default.realm")
+        let path = realmPathForFile("\(realmFilePrefix()).default.realm")
+        Realm.defaultPath = path
         try! NSFileManager.defaultManager().createDirectoryAtPath(realmPathForFile(""), withIntermediateDirectories: true, attributes: nil)
 
         exceptionThrown = false
         autoreleasepool { super.invokeTest() }
 
         if exceptionThrown {
-            RLMDeallocateRealm(Realm.defaultPath)
+            RLMDeallocateRealm(path)
             RLMDeallocateRealm(testRealmPath())
         }
         else {
-            XCTAssertNil(RLMGetThreadLocalCachedRealmForPath(Realm.defaultPath))
-            XCTAssertNil(RLMGetThreadLocalCachedRealmForPath(testRealmPath()))
+            XCTAssertFalse(RLMHasCachedRealmForPath(path))
+            XCTAssertFalse(RLMHasCachedRealmForPath(testRealmPath()))
         }
         deleteRealmFiles()
         RLMRealm.resetRealmState()

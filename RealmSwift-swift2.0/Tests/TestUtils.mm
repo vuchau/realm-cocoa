@@ -19,7 +19,7 @@
 #import "TestUtils.h"
 
 #import <Realm/Realm.h>
-#import <Realm/RLMRealmUtil.h>
+#import <Realm/RLMRealmUtil.hpp>
 #import <Realm/RLMSchema_Private.h>
 
 // This ensures the shared schema is initialized outside of of a test case,
@@ -54,7 +54,7 @@ void RLMDeallocateRealm(NSString *path) {
     __weak RLMRealm *realm;
 
     @autoreleasepool {
-        realm = RLMGetThreadLocalCachedRealmForPath(path);
+        realm = RLMGetThreadLocalCachedRealmForPath(path.UTF8String);
     }
 
     while (true) {
@@ -65,4 +65,8 @@ void RLMDeallocateRealm(NSString *path) {
         }
         CFRelease((__bridge void *)realm);
     }
+}
+
+bool RLMHasCachedRealmForPath(NSString *path) {
+    return RLMGetAnyCachedRealmForPath(path.UTF8String);
 }

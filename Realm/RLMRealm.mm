@@ -30,7 +30,7 @@
 #import "RLMObservation.hpp"
 #import "RLMProperty.h"
 #import "RLMQueryUtil.hpp"
-#import "RLMRealmUtil.h"
+#import "RLMRealmUtil.hpp"
 #import "RLMSchema_Private.h"
 #import "RLMUpdateChecker.hpp"
 #import "RLMUtil.hpp"
@@ -400,7 +400,7 @@ static void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema) 
     bool readOnly = configuration.readOnly;
 
     // try to reuse existing realm first
-    RLMRealm *realm = RLMGetThreadLocalCachedRealmForPath(path);
+    RLMRealm *realm = RLMGetThreadLocalCachedRealmForPath(config.path);
     if (realm) {
         auto const& old_config = realm->_realm->config();
         if (old_config.read_only != config.read_only) {
@@ -442,7 +442,7 @@ static void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema) 
         }
 
         // if we have a cached realm on another thread, copy without a transaction
-        if (RLMRealm *cachedRealm = RLMGetAnyCachedRealmForPath(path)) {
+        if (RLMRealm *cachedRealm = RLMGetAnyCachedRealmForPath(config.path)) {
             realm.schema = [cachedRealm.schema shallowCopy];
             for (RLMObjectSchema *objectSchema in realm.schema.objectSchema) {
                 objectSchema.realm = realm;
@@ -468,7 +468,7 @@ static void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema) 
         }
 
         if (!dynamic) {
-            RLMCacheRealm(realm);
+            RLMCacheRealm(config.path, realm);
         }
     }
 
@@ -492,7 +492,7 @@ static void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema) 
 + (void)setEncryptionKey:(NSData *)key forRealmsAtPath:(NSString *)path {
     RLMRealmConfigurationUsePerPath(_cmd);
     @synchronized (s_keysPerPath) {
-        if (RLMGetAnyCachedRealmForPath(path)) {
+        if (RLMGetAnyCachedRealmForPath(path.UTF8String)) {
             NSData *existingKey = keyForPath(path);
             if (!(existingKey == key || [existingKey isEqual:key])) {
                 @throw RLMException(@"Cannot set encryption key for Realms that are already open.");
@@ -752,7 +752,7 @@ static void CheckReadWrite(RLMRealm *realm, NSString *msg=@"Cannot write to a re
 + (void)setSchemaVersion:(uint64_t)version forRealmAtPath:(NSString *)realmPath withMigrationBlock:(RLMMigrationBlock)block {
     RLMRealmConfigurationUsePerPath(_cmd);
     @synchronized(s_migrationBlocks) {
-        if (RLMGetAnyCachedRealmForPath(realmPath) && schemaVersionForPath(realmPath) != version) {
+        if (RLMGetAnyCachedRealmForPath(realmPath.UTF8String) && schemaVersionForPath(realmPath) != version) {
             @throw RLMException(@"Cannot set schema version for Realms that are already open.");
         }
 
@@ -816,11 +816,11 @@ void RLMRealmSetSchemaVersionForPath(uint64_t version, NSString *path, RLMMigrat
 }
 
 + (NSError *)migrateRealm:(RLMRealmConfiguration *)configuration {
-    NSString *realmPath = configuration.path;
-    if (RLMGetAnyCachedRealmForPath(realmPath)) {
+    if (RLMGetAnyCachedRealmForPath(configuration.config.path)) {
         @throw RLMException(@"Cannot migrate Realms that are already open.");
     }
 
+    NSString *realmPath = configuration.path;
     NSData *key = configuration.encryptionKey ?: keyForPath(realmPath);
 
     @autoreleasepool {
