@@ -92,6 +92,7 @@ SharedRealm Realm::get_shared_realm(Config config)
 {
     SharedRealm realm = s_global_cache.get_realm(config.path);
     if (realm) {
+        REALM_ASSERT(false);
         if (realm->config().read_only != config.read_only) {
             throw MismatchedConfigException("Realm at path already opened with different read permissions.");
         }
