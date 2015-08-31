@@ -79,38 +79,6 @@ void RLMDisableSyncToDisk() {
 }
 @end
 
-namespace {
-class RLMNotificationHelper : public realm::RealmDelegate {
-public:
-    RLMNotificationHelper(RLMRealm *realm, NSError **error)
-    : realm(realm)
-    , notifier([[RLMNotifier alloc] initWithRealm:realm error:error])
-    {
-    }
-
-    ~RLMNotificationHelper() {
-        [notifier stop];
-    }
-
-    void transaction_committed() override {
-        [notifier notifyOtherRealms];
-    }
-
-    void changes_available() override {
-        [realm sendNotifications:RLMRealmRefreshRequiredNotification];
-    }
-
-    void did_change() override {
-        [realm sendNotifications:RLMRealmDidChangeNotification];
-    }
-
-private:
-    // This is owned by the realm, so it needs to not retain the realm
-    __unsafe_unretained RLMRealm *const realm;
-    RLMNotifier *notifier;
-};
-}
-
 //
 // Global encryption key cache and validation
 //
@@ -513,7 +481,7 @@ static void RLMRealmSetSchemaAndAlign(RLMRealm *realm, RLMSchema *targetSchema) 
     if (!readOnly) {
         // initializing the schema started a read transaction, so end it
         [realm invalidate];
-        realm->_realm->m_delegate = std::make_unique<RLMNotificationHelper>(realm, error);
+        realm->_realm->m_delegate = RLMCreateRealmDelegate(realm, error);
     }
 
     return RLMAutorelease(realm);
